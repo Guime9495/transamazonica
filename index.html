@@ -577,6 +577,18 @@
     .live-card:hover .live-card-action {
       gap: 8px
     }
+
+    .version-label {
+      position: fixed;
+      bottom: 8px;
+      right: 12px;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 10px;
+      color: var(--dim);
+      opacity: .5;
+      z-index: 999;
+      pointer-events: none
+    }
   </style>
 </head>
 
@@ -745,7 +757,7 @@
 
     window.addEventListener('load', function () {
       window._map = L.map('map', { zoomControl: true, attributionControl: false });
-      L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', { maxZoom: 20, subdomains: ['mt0', 'mt1', 'mt2', 'mt3'] }).addTo(window._map);
+      L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { maxZoom: 20, subdomains: ['mt0', 'mt1', 'mt2', 'mt3'] }).addTo(window._map);
       window._map.setView([-6.35, -58.12], 12);
       mainFetch();
       startTimer();
@@ -846,6 +858,7 @@
       window.open('https://www.youtube.com/watch?v=' + videoId, '_blank');
     }
   </script>
+  <div class="version-label">v1.0</div>
 </body>
 
 </html>

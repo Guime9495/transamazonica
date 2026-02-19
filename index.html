@@ -819,6 +819,7 @@
         <option value="30000">30s</option>
       </select>
       <span id="lupd">—</span>
+      <span id="onl" style="color:var(--green);font-weight:600;margin-left:8px">🟢 1 ONLINE</span>
     </div>
     <div class="nav">
       <button class="ntab on" onclick="showPage('map')">🗺 MAPA</button>
@@ -1195,6 +1196,21 @@
 
     // Chamar inicialização do Pix após o carregamento
     setTimeout(initPix, 1000);
+
+    /* ── Online Counter ── */
+    function updateOnline() {
+      fetch('/api/online')
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.online) {
+            document.getElementById('onl').innerHTML = '🟢 ' + data.online + ' ONLINE';
+          }
+        })
+        .catch(function (e) { console.error('Online count error:', e); });
+    }
+    // Pulso a cada 20 segundos
+    setInterval(updateOnline, 20000);
+    setTimeout(updateOnline, 2000);
   </script>
   <div class="version-label">v1.1</div>
 </body>

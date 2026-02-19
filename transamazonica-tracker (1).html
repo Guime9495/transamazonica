@@ -1,0 +1,1392 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Transamazônica 2026 — Live Tracker</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;600&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    :root {
+      --bg: #0a0c0a;
+      --surf: #111411;
+      --bord: #1e2a1e;
+      --green: #00ff6a;
+      --gdim: #00cc55;
+      --gmut: #004422;
+      --ora: #ff6b2b;
+      --txt: #c8d8c8;
+      --dim: #5a7a5a;
+      --red: #ff3333
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box
+    }
+
+    body {
+      font-family: 'IBM Plex Sans', sans-serif;
+      background: var(--bg);
+      color: var(--txt);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      height: 52px;
+      background: var(--surf);
+      border-bottom: 1px solid var(--bord);
+      flex-shrink: 0;
+      gap: 16px
+    }
+
+    .logo {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 20px;
+      letter-spacing: 3px;
+      color: var(--green);
+      white-space: nowrap
+    }
+
+    .logo small {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 12px;
+      color: var(--dim);
+      margin-left: 6px
+    }
+
+    .nav {
+      display: flex;
+      gap: 4px;
+      margin-left: auto
+    }
+
+    .ntab {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      padding: 5px 14px;
+      border: 1px solid var(--bord);
+      border-radius: 3px;
+      cursor: pointer;
+      color: var(--dim);
+      background: transparent
+    }
+
+    .ntab.on {
+      background: var(--gmut);
+      color: var(--green);
+      border-color: var(--gdim)
+    }
+
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--dim);
+      flex-shrink: 0;
+      display: inline-block
+    }
+
+    .dot.live {
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+      animation: blink 1.5s infinite
+    }
+
+    .dot.err {
+      background: var(--red);
+      box-shadow: 0 0 6px var(--red);
+      animation: none
+    }
+
+    @keyframes blink {
+
+      0%,
+      100% {
+        opacity: 1
+      }
+
+      50% {
+        opacity: .3
+      }
+    }
+
+    #stxt {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      color: var(--dim)
+    }
+
+    #stxt.live {
+      color: var(--green)
+    }
+
+    #stxt.err {
+      color: var(--red)
+    }
+
+    select {
+      background: var(--bg);
+      border: 1px solid var(--bord);
+      color: var(--txt);
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      padding: 3px 6px;
+      border-radius: 3px;
+      cursor: pointer;
+      outline: none
+    }
+
+    #lupd {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      color: var(--dim)
+    }
+
+    .page {
+      display: none;
+      flex: 1;
+      overflow: hidden
+    }
+
+    .page.on {
+      display: flex
+    }
+
+    /* MAP */
+    #pg-map {
+      flex-direction: row
+    }
+
+    #map {
+      flex: 1;
+      background: #0d1a0d
+    }
+
+    .sidebar {
+      width: 290px;
+      flex-shrink: 0;
+      background: var(--surf);
+      border-left: 1px solid var(--bord);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden
+    }
+
+    .sbh {
+      padding: 12px 18px 10px;
+      border-bottom: 1px solid var(--bord);
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 14px;
+      letter-spacing: 2px;
+      color: var(--dim);
+      display: flex;
+      justify-content: space-between;
+      align-items: center
+    }
+
+    .badge {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      background: var(--gmut);
+      color: var(--green);
+      padding: 2px 8px;
+      border-radius: 2px
+    }
+
+    .rlist {
+      overflow-y: auto;
+      flex: 1
+    }
+
+    .rlist::-webkit-scrollbar {
+      width: 4px
+    }
+
+    .rlist::-webkit-scrollbar-thumb {
+      background: var(--bord);
+      border-radius: 2px
+    }
+
+    .rcard {
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--bord);
+      cursor: pointer;
+      transition: background .12s;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start
+    }
+
+    .rcard:hover {
+      background: rgba(0, 255, 106, .04)
+    }
+
+    .rcard.active {
+      background: rgba(0, 255, 106, .07);
+      border-left: 2px solid var(--green);
+      padding-left: 16px
+    }
+
+    .av {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--gmut);
+      border: 1.5px solid var(--gdim);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 15px;
+      color: var(--green);
+      overflow: hidden
+    }
+
+    .av img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 50%
+    }
+
+    .ri {
+      flex: 1;
+      min-width: 0
+    }
+
+    .rn {
+      font-weight: 600;
+      font-size: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 3px
+    }
+
+    .rm {
+      display: flex;
+      gap: 8px;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 10px;
+      color: var(--dim)
+    }
+
+    .spd {
+      color: var(--ora);
+      font-weight: 500
+    }
+
+    .ago {
+      font-size: 10px;
+      color: var(--dim);
+      font-family: 'IBM Plex Mono', monospace;
+      margin-top: 2px
+    }
+
+    .empty {
+      padding: 32px 16px;
+      text-align: center;
+      color: var(--dim);
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      line-height: 2
+    }
+
+    .mk {
+      position: relative
+    }
+
+    .mr {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      border: 2px solid #00ff6a;
+      box-shadow: 0 0 10px rgba(0, 255, 106, .5);
+      background: rgba(0, 20, 10, .88);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 13px;
+      color: #00ff6a;
+      overflow: hidden;
+      cursor: pointer
+    }
+
+    .mr img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 50%
+    }
+
+    .ml {
+      position: absolute;
+      top: 36px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(8, 10, 8, .92);
+      border: 1px solid #1e2a1e;
+      color: #c8d8c8;
+      font-size: 10px;
+      white-space: nowrap;
+      padding: 1px 5px;
+      border-radius: 2px;
+      font-family: monospace;
+      pointer-events: none
+    }
+
+    .leaflet-popup-content-wrapper {
+      background: #111411 !important;
+      border: 1px solid #00cc55 !important;
+      border-radius: 4px !important;
+      color: #c8d8c8 !important
+    }
+
+    .leaflet-popup-tip {
+      background: #111411 !important
+    }
+
+    .pc {
+      font-family: monospace;
+      font-size: 11px;
+      min-width: 155px
+    }
+
+    .pn {
+      font-weight: 600;
+      font-size: 12px;
+      margin-bottom: 6px;
+      color: #00ff6a
+    }
+
+    .pr {
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      margin-top: 2px;
+      color: #5a7a5a
+    }
+
+    .pv {
+      color: #c8d8c8
+    }
+
+    .ps {
+      color: #ff6b2b
+    }
+
+    /* DIAGNOSIS PAGE */
+    #pg-diag {
+      flex-direction: column;
+      overflow-y: auto
+    }
+
+    .diag {
+      padding: 28px;
+      max-width: 820px;
+      width: 100%;
+      margin: 0 auto
+    }
+
+    .diag h2 {
+      font-family: 'Bebas Neue', sans-serif;
+      letter-spacing: 3px;
+      font-size: 22px;
+      color: var(--green);
+      margin-bottom: 6px
+    }
+
+    .diag .sub {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 12px;
+      color: var(--dim);
+      margin-bottom: 28px
+    }
+
+    .card {
+      background: var(--surf);
+      border: 1px solid var(--bord);
+      border-radius: 6px;
+      padding: 20px 24px;
+      margin-bottom: 16px
+    }
+
+    .card-title {
+      font-family: 'Bebas Neue', sans-serif;
+      letter-spacing: 2px;
+      font-size: 14px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px
+    }
+
+    .card-title .icon {
+      font-size: 18px
+    }
+
+    /* Comparison table */
+    .compare {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      margin-top: 4px
+    }
+
+    .compare th {
+      padding: 8px 12px;
+      border-bottom: 2px solid var(--bord);
+      color: var(--dim);
+      text-align: left;
+      font-weight: 600
+    }
+
+    .compare td {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--bord);
+      vertical-align: top
+    }
+
+    .compare td:first-child {
+      color: var(--txt);
+      width: 35%
+    }
+
+    .tag-ok {
+      background: #001a0a;
+      color: var(--green);
+      border: 1px solid var(--gdim);
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-size: 10px
+    }
+
+    .tag-err {
+      background: #1a0000;
+      color: var(--red);
+      border: 1px solid var(--red);
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-size: 10px
+    }
+
+    /* Header highlight */
+    .hdr-box {
+      background: #060d06;
+      border: 1px solid var(--bord);
+      border-radius: 4px;
+      padding: 12px 14px;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      line-height: 2;
+      margin-top: 8px
+    }
+
+    .hdr-bad {
+      color: var(--red)
+    }
+
+    .hdr-good {
+      color: var(--green)
+    }
+
+    .hdr-dim {
+      color: var(--dim)
+    }
+
+    /* Fix steps */
+    .steps {
+      counter-reset: step;
+      margin-top: 4px
+    }
+
+    .step {
+      display: flex;
+      gap: 14px;
+      margin-bottom: 14px;
+      align-items: flex-start
+    }
+
+    .step-num {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: var(--gmut);
+      border: 1px solid var(--gdim);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 14px;
+      color: var(--green);
+      flex-shrink: 0;
+      margin-top: 2px
+    }
+
+    .step-body {
+      flex: 1
+    }
+
+    .step-title {
+      font-weight: 600;
+      font-size: 13px;
+      margin-bottom: 4px
+    }
+
+    .step-desc {
+      font-size: 12px;
+      color: var(--dim);
+      line-height: 1.7
+    }
+
+    code {
+      background: #060d06;
+      border: 1px solid var(--bord);
+      padding: 2px 7px;
+      border-radius: 3px;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      color: var(--green)
+    }
+
+    pre.code-block {
+      background: #060d06;
+      border: 1px solid var(--bord);
+      border-radius: 4px;
+      padding: 12px 14px;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      line-height: 1.8;
+      margin-top: 8px;
+      overflow-x: auto;
+      color: var(--txt)
+    }
+
+    pre.code-block .g {
+      color: var(--green)
+    }
+
+    pre.code-block .d {
+      color: var(--dim)
+    }
+
+    pre.code-block .r {
+      color: var(--red)
+    }
+
+    /* Live test */
+    .live-test {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap
+    }
+
+    .btn {
+      background: var(--gmut);
+      color: var(--green);
+      border: 1px solid var(--gdim);
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      padding: 7px 16px;
+      border-radius: 4px;
+      cursor: pointer
+    }
+
+    .btn:hover {
+      background: #005533
+    }
+
+    .result-box {
+      background: #060d06;
+      border: 1px solid var(--bord);
+      border-radius: 4px;
+      padding: 10px 14px;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      line-height: 1.8;
+      margin-top: 10px;
+      display: none
+    }
+
+    .result-box.show {
+      display: block
+    }
+
+    .ok {
+      color: var(--green)
+    }
+
+    .er {
+      color: var(--red)
+    }
+
+    .wa {
+      color: var(--ora)
+    }
+
+    .hi {
+      color: #fff
+    }
+
+    /* LIVES PAGE */
+    #pg-lives {
+      flex-direction: column;
+      overflow-y: auto
+    }
+
+    .lives-container {
+      padding: 28px;
+      max-width: 1000px;
+      width: 100%;
+      margin: 0 auto
+    }
+
+    .lives-container h2 {
+      font-family: 'Bebas Neue', sans-serif;
+      letter-spacing: 3px;
+      font-size: 26px;
+      color: var(--green);
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 12px
+    }
+
+    .lives-container .sub {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 12px;
+      color: var(--dim);
+      margin-bottom: 28px
+    }
+
+    .lives-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px
+    }
+
+    .live-card {
+      background: linear-gradient(145deg, var(--surf), #0d120d);
+      border: 1px solid var(--bord);
+      border-radius: 12px;
+      padding: 0;
+      overflow: hidden;
+      cursor: pointer;
+      transition: all .3s ease;
+      position: relative
+    }
+
+    .live-card:hover {
+      border-color: var(--gdim);
+      transform: translateY(-4px);
+      box-shadow: 0 12px 40px rgba(0, 255, 106, .12)
+    }
+
+    .live-card-thumb {
+      width: 100%;
+      height: 160px;
+      background-size: cover;
+      background-position: center;
+      position: relative;
+      overflow: hidden
+    }
+
+    .live-card-thumb::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 60%;
+      background: linear-gradient(transparent, rgba(10, 12, 10, .95))
+    }
+
+    .live-play-btn {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 56px;
+      height: 56px;
+      background: rgba(0, 255, 106, .15);
+      backdrop-filter: blur(8px);
+      border: 2px solid var(--green);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 2;
+      transition: all .3s ease
+    }
+
+    .live-card:hover .live-play-btn {
+      background: rgba(0, 255, 106, .3);
+      transform: translate(-50%, -50%) scale(1.1);
+      box-shadow: 0 0 30px rgba(0, 255, 106, .4)
+    }
+
+    .live-play-btn svg {
+      width: 24px;
+      height: 24px;
+      fill: var(--green);
+      margin-left: 3px
+    }
+
+    .live-badge {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      background: #ff0000;
+      color: #fff;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 10px;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 3px;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      text-transform: uppercase;
+      letter-spacing: 1px
+    }
+
+    .live-badge::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #fff;
+      animation: blink 1.5s infinite
+    }
+
+    .live-card-info {
+      padding: 16px 20px 20px
+    }
+
+    .live-card-name {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 20px;
+      letter-spacing: 2px;
+      color: var(--txt);
+      margin-bottom: 4px
+    }
+
+    .live-card-desc {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      color: var(--dim);
+      line-height: 1.6
+    }
+
+    .live-card-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--bord)
+    }
+
+    .live-card-yt {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 10px;
+      color: var(--dim)
+    }
+
+    .live-card-yt svg {
+      width: 16px;
+      height: 16px;
+      fill: #ff0000
+    }
+
+    .live-card-action {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 10px;
+      color: var(--green);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      transition: gap .2s
+    }
+
+    .live-card:hover .live-card-action {
+      gap: 8px
+    }
+
+    /* YouTube Modal */
+    .yt-modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, .85);
+      backdrop-filter: blur(6px);
+      z-index: 9999;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity .3s ease
+    }
+
+    .yt-modal-overlay.show {
+      display: flex;
+      opacity: 1
+    }
+
+    .yt-modal {
+      width: 90%;
+      max-width: 960px;
+      background: var(--surf);
+      border: 1px solid var(--gdim);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0, 255, 106, .1);
+      transform: scale(.9);
+      transition: transform .3s ease
+    }
+
+    .yt-modal-overlay.show .yt-modal {
+      transform: scale(1)
+    }
+
+    .yt-modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--bord)
+    }
+
+    .yt-modal-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 18px;
+      letter-spacing: 2px;
+      color: var(--green);
+      display: flex;
+      align-items: center;
+      gap: 10px
+    }
+
+    .yt-modal-close {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, .05);
+      border: 1px solid var(--bord);
+      color: var(--dim);
+      font-size: 18px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all .2s
+    }
+
+    .yt-modal-close:hover {
+      background: rgba(255, 51, 51, .15);
+      border-color: var(--red);
+      color: var(--red)
+    }
+
+    .yt-modal-body {
+      position: relative;
+      padding-bottom: 56.25%;
+      height: 0
+    }
+
+    .yt-modal-body iframe {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      border: none
+    }
+  </style>
+</head>
+
+<body>
+
+  <header>
+    <div class="logo">Transamazônica<small>2026 LIVE</small></div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <div class="dot" id="dot"></div>
+      <span id="stxt">CONECTANDO...</span>
+    </div>
+    <div
+      style="display:flex;align-items:center;gap:8px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--dim)">
+      Intervalo:
+      <select id="isel">
+        <option value="3000" selected>3s</option>
+        <option value="5000">5s</option>
+        <option value="10000">10s</option>
+        <option value="30000">30s</option>
+      </select>
+      <span id="lupd">—</span>
+    </div>
+    <div class="nav">
+      <button class="ntab on" onclick="showPage('map')">🗺 MAPA</button>
+      <button class="ntab" onclick="showPage('lives')">📺 LIVES</button>
+      <button class="ntab" onclick="showPage('diag')">🔍 DIAGNÓSTICO</button>
+    </div>
+  </header>
+
+  <!-- MAP -->
+  <div class="page on" id="pg-map">
+    <div id="map"></div>
+    <div class="sidebar">
+      <div class="sbh">PILOTOS <span class="badge" id="cnt">0</span></div>
+      <div class="rlist" id="rlist">
+        <div class="empty">Conectando...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DIAGNOSIS PAGE -->
+  <div class="page" id="pg-diag">
+    <div class="diag">
+
+      <h2>🔍 POR QUE NÃO FUNCIONA?</h2>
+      <div class="sub">Diagnóstico completo do problema de conexão com a API</div>
+
+      <!-- Card 1: comparação -->
+      <div class="card">
+        <div class="card-title"><span class="icon">🧠</span> O QUE É DIFERENTE ENTRE ABRIR NO BROWSER E USAR NO APP
+        </div>
+        <table class="compare">
+          <tr>
+            <th>Situação</th>
+            <th>Como funciona</th>
+            <th>Resultado</th>
+          </tr>
+          <tr>
+            <td>Você digita a URL na barra do navegador</td>
+            <td>O browser faz o request diretamente, <b>sem verificar CORS</b>. É uma requisição "normal" de navegação.
+            </td>
+            <td><span class="tag-ok">✅ FUNCIONA</span></td>
+          </tr>
+          <tr>
+            <td>JavaScript faz <code>fetch()</code> de dentro de uma página</td>
+            <td>O browser impõe CORS: verifica o header <code>Access-Control-Allow-Origin</code> na resposta. Se não
+              autorizar, <b>bloqueia antes de chegar no código</b>.</td>
+            <td><span class="tag-err">❌ BLOQUEADO</span></td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- Card 2: header problemático -->
+      <div class="card">
+        <div class="card-title"><span class="icon">🚫</span> O HEADER CULPADO NA SUA API</div>
+        <p style="font-size:12px;color:var(--dim);line-height:1.8;margin-bottom:10px">
+          Inspecionando os headers de resposta da sua API, encontramos isso:
+        </p>
+        <div class="hdr-box">
+          <span class="hdr-dim">access-control-allow-methods : GET, POST, PUT, DELETE, PATCH, OPTIONS</span><br>
+          <span class="hdr-dim">access-control-allow-headers : Content-Type, Authorization</span><br>
+          <span class="hdr-dim">access-control-allow-credentials : true</span><br>
+          <span class="hdr-bad">access-control-allow-origin : <b>null</b> ← ⚠️ ESTE É O PROBLEMA</span>
+        </div>
+        <p style="font-size:12px;color:var(--dim);line-height:1.8;margin-top:12px">
+          O valor <code>null</code> significa: <b style="color:var(--red)">"nenhuma origem externa tem permissão"</b>. O
+          browser lê isso e descarta a resposta antes do JavaScript receber qualquer dado.
+        </p>
+      </div>
+
+      <!-- Card 3: fix -->
+      <div class="card">
+        <div class="card-title"><span class="icon">🔧</span> COMO CORRIGIR — NO SERVIDOR DA API</div>
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div class="step-body">
+              <div class="step-title">Troque o valor do header CORS</div>
+              <div class="step-desc">No backend (Next.js / Express / Nginx / Cloudflare), altere de <code>null</code>
+                para <code>*</code>:</div>
+              <pre class="code-block"><span class="r">- Access-Control-Allow-Origin: null</span>
+<span class="g">+ Access-Control-Allow-Origin: *</span></pre>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <div class="step-body">
+              <div class="step-title">Se o backend for Next.js (mais provável pelo header da resposta)</div>
+              <div class="step-desc">No arquivo de rota da API, adicione:</div>
+              <pre class="code-block"><span class="d">// app/api/v1/helios/positions/route.ts  (ou .js)</span>
+export async function GET(request) {
+  <span class="d">// ... seu código ...</span>
+  return NextResponse.json(data, {
+    headers: {
+      <span class="g">'Access-Control-Allow-Origin': '*',</span>
+      'Access-Control-Allow-Methods': 'GET',
+    }
+  });
+}</pre>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <div class="step-body">
+              <div class="step-title">Ou use um middleware global no Next.js</div>
+              <div class="step-desc">No arquivo <code>next.config.js</code>:</div>
+              <pre class="code-block">module.exports = {
+  async headers() {
+    return [{
+      source: '/api/:path*',
+      headers: [
+        { key: <span class="g">'Access-Control-Allow-Origin'</span>, value: <span class="g">'*'</span> },
+        { key: 'Access-Control-Allow-Methods', value: 'GET,POST,OPTIONS' },
+      ],
+    }];
+  },
+};</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 4: live test -->
+      <div class="card">
+        <div class="card-title"><span class="icon">🧪</span> TESTE AO VIVO — CLIQUE PARA VER O ERRO EM DETALHES</div>
+        <p style="font-size:12px;color:var(--dim);margin-bottom:12px;line-height:1.7">
+          Clique abaixo para fazer o fetch agora e mostrar exatamente o que o browser retorna:
+        </p>
+        <div class="live-test">
+          <button class="btn" onclick="runLiveTest()">▶ EXECUTAR FETCH AGORA</button>
+          <button class="btn" onclick="openInTab()"
+            style="background:transparent;border-color:var(--bord);color:var(--dim)">↗ ABRIR URL NO BROWSER</button>
+        </div>
+        <div class="result-box" id="test-result"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- LIVES PAGE -->
+  <div class="page" id="pg-lives">
+    <div class="lives-container">
+      <h2>📺 TRANSMISSÕES AO VIVO</h2>
+      <div class="sub">Acompanhe as lives dos pilotos da Transamazônica 2026 em tempo real</div>
+
+      <div class="lives-grid">
+
+        <!-- RICHARD -->
+        <div class="live-card" onclick="openLive('Richard', '6S8zY_Sm4cI')">
+          <div class="live-card-thumb"
+            style="background-image:url('https://img.youtube.com/vi/6S8zY_Sm4cI/hqdefault.jpg')">
+            <div class="live-badge">AO VIVO</div>
+            <div class="live-play-btn">
+              <svg viewBox="0 0 24 24">
+                <polygon points="8,5 19,12 8,19" />
+              </svg>
+            </div>
+          </div>
+          <div class="live-card-info">
+            <div class="live-card-name">RICHARD</div>
+            <div class="live-card-desc">Transmissão ao vivo — Transamazônica 2026</div>
+            <div class="live-card-footer">
+              <div class="live-card-yt">
+                <svg viewBox="0 0 24 24">
+                  <path
+                    d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814z" />
+                  <polygon points="9.545,15.568 15.818,12 9.545,8.432" fill="#fff" />
+                </svg>
+                YouTube
+              </div>
+              <div class="live-card-action">ASSISTIR →</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ACF -->
+        <div class="live-card" onclick="openLive('ACF', 'jtg2RVUXoUM')">
+          <div class="live-card-thumb"
+            style="background-image:url('https://img.youtube.com/vi/jtg2RVUXoUM/hqdefault.jpg')">
+            <div class="live-badge">AO VIVO</div>
+            <div class="live-play-btn">
+              <svg viewBox="0 0 24 24">
+                <polygon points="8,5 19,12 8,19" />
+              </svg>
+            </div>
+          </div>
+          <div class="live-card-info">
+            <div class="live-card-name">ACF</div>
+            <div class="live-card-desc">Transmissão ao vivo — Transamazônica 2026</div>
+            <div class="live-card-footer">
+              <div class="live-card-yt">
+                <svg viewBox="0 0 24 24">
+                  <path
+                    d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814z" />
+                  <polygon points="9.545,15.568 15.818,12 9.545,8.432" fill="#fff" />
+                </svg>
+                YouTube
+              </div>
+              <div class="live-card-action">ASSISTIR →</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- DOUGLAS -->
+        <div class="live-card" onclick="openLive('Douglas', 'I_5TYZNrbMY')">
+          <div class="live-card-thumb"
+            style="background-image:url('https://img.youtube.com/vi/I_5TYZNrbMY/hqdefault.jpg')">
+            <div class="live-badge">AO VIVO</div>
+            <div class="live-play-btn">
+              <svg viewBox="0 0 24 24">
+                <polygon points="8,5 19,12 8,19" />
+              </svg>
+            </div>
+          </div>
+          <div class="live-card-info">
+            <div class="live-card-name">DOUGLAS</div>
+            <div class="live-card-desc">Transmissão ao vivo — Transamazônica 2026</div>
+            <div class="live-card-footer">
+              <div class="live-card-yt">
+                <svg viewBox="0 0 24 24">
+                  <path
+                    d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814z" />
+                  <polygon points="9.545,15.568 15.818,12 9.545,8.432" fill="#fff" />
+                </svg>
+                YouTube
+              </div>
+              <div class="live-card-action">ASSISTIR →</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- YouTube Modal -->
+  <div class="yt-modal-overlay" id="ytOverlay" onclick="closeLive(event)">
+    <div class="yt-modal">
+      <div class="yt-modal-header">
+        <div class="yt-modal-title">
+          <span>📺</span>
+          <span id="ytModalName">LIVE</span>
+        </div>
+        <button class="yt-modal-close" onclick="closeLive(event, true)">✕</button>
+      </div>
+      <div class="yt-modal-body">
+        <iframe id="ytFrame" src=""
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowfullscreen></iframe>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    var API_RAW = 'https://helios.ratonet.com.br/api/v1/helios/positions?slug=transamazonica-2026';
+    var API_URL = 'https://api.codetabs.com/v1/proxy?quest=' + API_RAW;
+    var BASE = 'https://helios.ratonet.com.br';
+    var timerId = null, iMs = 3000;
+
+    /* ── nav ── */
+    function showPage(p) {
+      document.getElementById('pg-map').classList.toggle('on', p === 'map');
+      document.getElementById('pg-lives').classList.toggle('on', p === 'lives');
+      document.getElementById('pg-diag').classList.toggle('on', p === 'diag');
+      document.querySelectorAll('.ntab').forEach(function (b, i) {
+        b.classList.toggle('on', (i === 0 && p === 'map') || (i === 1 && p === 'lives') || (i === 2 && p === 'diag'));
+      });
+      if (p === 'map' && window._map) window._map.invalidateSize();
+    }
+
+    /* ── helpers ── */
+    function ini(n) { return n.split(' ').slice(0, 2).map(function (w) { return w[0] }).join('').toUpperCase(); }
+    function ago(ts) {
+      var d = Math.floor((Date.now() - new Date(ts)) / 1000);
+      if (d < 5) return 'agora'; if (d < 60) return d + 's atrás';
+      if (d < 3600) return Math.floor(d / 60) + 'min atrás';
+      return Math.floor(d / 3600) + 'h atrás';
+    }
+    function kmh(s) { return (s * 3.6).toFixed(1); }
+
+    /* ── map ── */
+    var markers = {}, activeId = null, firstFit = true;
+
+    window.addEventListener('load', function () {
+      window._map = L.map('map', { zoomControl: true, attributionControl: false });
+      L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', { maxZoom: 20, subdomains: ['mt0', 'mt1', 'mt2', 'mt3'] }).addTo(window._map);
+      window._map.setView([-6.35, -58.12], 12);
+      mainFetch();
+      startTimer();
+    });
+
+    function mkIcon(u) {
+      var i = ini(u.userName);
+      var inner = u.avatarUrl ? '<img src="' + BASE + u.avatarUrl + '" onerror="this.style.display=\'none\'">' : i;
+      return L.divIcon({ className: '', html: '<div class="mk"><div class="mr">' + inner + '</div><div class="ml">' + u.userName.split(' ')[0] + '</div></div>', iconSize: [34, 58], iconAnchor: [17, 17], popupAnchor: [0, -20] });
+    }
+    function mkPopup(u) {
+      return '<div class="pc"><div class="pn">' + u.userName + '</div>' +
+        '<div class="pr"><span>Velocidade</span><span class="pv ps">' + kmh(u.speed) + ' km/h</span></div>' +
+        '<div class="pr"><span>Heading</span><span class="pv">' + u.heading.toFixed(1) + '°</span></div>' +
+        '<div class="pr"><span>Lat</span><span class="pv">' + u.latitude.toFixed(5) + '</span></div>' +
+        '<div class="pr"><span>Lng</span><span class="pv">' + u.longitude.toFixed(5) + '</span></div>' +
+        '<div class="pr"><span>Update</span><span class="pv">' + ago(u.timestamp) + '</span></div></div>';
+    }
+    function updateMap(pos) {
+      document.getElementById('cnt').textContent = pos.length;
+      var el = document.getElementById('rlist');
+      if (!pos.length) { el.innerHTML = '<div class="empty">Nenhum piloto agora</div>'; return; }
+      var seen = {};
+      pos.forEach(function (u) {
+        seen[u.userId] = true;
+        var ll = [u.latitude, u.longitude];
+        if (markers[u.userId]) {
+          markers[u.userId].setLatLng(ll);
+          markers[u.userId].setIcon(mkIcon(u));
+          markers[u.userId].setPopupContent(mkPopup(u));
+        } else {
+          var m = L.marker(ll, { icon: mkIcon(u) }).addTo(window._map);
+          m.bindPopup(mkPopup(u)); markers[u.userId] = m;
+        }
+      });
+      Object.keys(markers).forEach(function (id) {
+        if (!seen[id]) { window._map.removeLayer(markers[id]); delete markers[id]; }
+      });
+      if (firstFit && pos.length) {
+        firstFit = false;
+        window._map.fitBounds(pos.map(function (u) { return [u.latitude, u.longitude] }), { padding: [60, 60] });
+      }
+      el.innerHTML = pos.map(function (u) {
+        var av = u.avatarUrl ? '<img src="' + BASE + u.avatarUrl + '">' : ini(u.userName);
+        return '<div class="rcard' + (u.userId === activeId ? ' active' : '') + '" onclick="focusRider(\'' + u.userId + '\')">' +
+          '<div class="av">' + av + '</div>' +
+          '<div class="ri"><div class="rn">' + u.userName + '</div>' +
+          '<div class="rm"><span class="spd">' + kmh(u.speed) + ' km/h</span><span>' + u.heading.toFixed(0) + '°</span></div>' +
+          '<div class="ago">' + ago(u.timestamp) + '</div></div></div>';
+      }).join('');
+    }
+    window.focusRider = function (id) {
+      activeId = id; var m = markers[id];
+      if (m) { window._map.setView(m.getLatLng(), 15, { animate: true }); m.openPopup(); }
+      document.querySelectorAll('.rcard').forEach(function (c) { c.classList.remove('active') });
+      document.querySelectorAll('.rcard').forEach(function (c) {
+        if (c.getAttribute('onclick') === "focusRider('" + id + "')") c.classList.add('active');
+      });
+    };
+
+    /* ── main fetch ── */
+    function handlePositions(data) {
+      var pos = data.positions || [];
+      document.getElementById('dot').className = 'dot live';
+      document.getElementById('stxt').className = 'live';
+      document.getElementById('stxt').textContent = 'AO VIVO — ' + pos.length + ' pilotos';
+      document.getElementById('lupd').textContent = new Date().toLocaleTimeString('pt-BR');
+      updateMap(pos);
+    }
+    function mainFetch() {
+      fetch(API_URL)
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function (data) { handlePositions(data); })
+        .catch(function (e) {
+          // Fallback: tentar direto (caso CORS seja corrigido no servidor)
+          fetch(API_RAW, { method: 'GET', headers: { 'Accept': '*/*' } })
+            .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+            .then(function (data) { handlePositions(data); })
+            .catch(function (e2) {
+              document.getElementById('dot').className = 'dot err';
+              document.getElementById('stxt').className = 'err';
+              document.getElementById('stxt').textContent = 'ERRO — ' + e2.message;
+            });
+        });
+    }
+    function startTimer() {
+      if (timerId) clearInterval(timerId);
+      timerId = setInterval(mainFetch, iMs);
+    }
+    document.getElementById('isel').addEventListener('change', function () {
+      iMs = parseInt(this.value, 10); startTimer();
+    });
+
+    /* ── live test ── */
+    function line(cls, text) {
+      return '<div class="' + cls + '">' + text + '</div>';
+    }
+
+    function runLiveTest() {
+      var box = document.getElementById('test-result');
+      box.className = 'result-box show';
+      box.innerHTML = line('wa', '⏳ Executando fetch via proxy CORS...');
+
+      var t0 = Date.now();
+      fetch(API_URL)
+        .then(function (r) {
+          var ms = Date.now() - t0;
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json().then(function (data) {
+            var pos = (data.positions || []).length;
+            box.innerHTML =
+              line('ok', '✅ Fetch FUNCIONOU via proxy! (' + ms + 'ms)') +
+              line('ok', '   Pilotos recebidos: ' + pos) +
+              '<br>' +
+              line('hi', 'Usando proxy: api.codetabs.com para contornar CORS');
+          });
+        })
+        .catch(function (e) {
+          var ms = Date.now() - t0;
+          box.innerHTML =
+            line('er', '❌ Fetch falhou (' + ms + 'ms)') +
+            line('er', '   Erro: ' + e.message) +
+            '<br>' +
+            line('wa', '⚠️ O proxy CORS pode estar temporariamente indisponível.') +
+            line('wa', '   Tente novamente em alguns segundos.');
+        });
+    }
+
+    function openInTab() {
+      window.open(API_RAW, '_blank');
+    }
+
+    /* ── YouTube Lives ── */
+    function openLive(name, videoId) {
+      document.getElementById('ytModalName').textContent = 'LIVE — ' + name.toUpperCase();
+      document.getElementById('ytFrame').src = 'https://www.youtube.com/embed/' + videoId + '?autoplay=1';
+      var overlay = document.getElementById('ytOverlay');
+      overlay.style.display = 'flex';
+      setTimeout(function () { overlay.classList.add('show'); }, 10);
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeLive(e, force) {
+      if (!force && e.target !== document.getElementById('ytOverlay')) return;
+      var overlay = document.getElementById('ytOverlay');
+      overlay.classList.remove('show');
+      setTimeout(function () {
+        overlay.style.display = 'none';
+        document.getElementById('ytFrame').src = '';
+      }, 300);
+      document.body.style.overflow = '';
+    }
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') closeLive(e, true);
+    });
+  </script>
+</body>
+
+</html>

@@ -261,13 +261,21 @@
     }
 
     .rcard:hover {
-      background: rgba(0, 255, 106, .04)
+      background: rgba(255, 255, 255, .03)
     }
 
     .rcard.active {
-      background: rgba(0, 255, 106, .07);
-      border-left: 2px solid var(--green);
-      padding-left: 16px
+      background: rgba(0, 255, 106, .08);
+      border-color: rgba(0, 255, 106, .3)
+    }
+
+    .rcard.lost {
+      border-left: 3px solid #ff3333;
+      background: rgba(255, 51, 51, .05);
+    }
+
+    .rcard.lost .rn {
+      color: #ff8888;
     }
 
     .av {
@@ -1036,25 +1044,8 @@
       return 'hsl(' + (Math.abs(hash) % 360) + ', 75%, 60%)';
     }
 
-    // OSRM Snap-to-Road
-    async function getRoadPath(p1, p2) {
-      if (!p1 || !p2) return [p2];
-      try {
-        var url = 'https://router.project-osrm.org/route/v1/driving/' +
-          p1[1].toFixed(6) + ',' + p1[0].toFixed(6) + ';' +
-          p2[1].toFixed(6) + ',' + p2[0].toFixed(6) +
-          '?overview=full&geometries=geojson';
-        var r = await fetch(url);
-        var d = await r.json();
-        if (d.code === 'Ok' && d.routes && d.routes[0]) {
-          return d.routes[0].geometry.coordinates.map(function (c) { return [c[1], c[0]]; });
-        }
-      } catch (e) { console.error('OSRM fail:', e); }
-      return [p2]; // Fallback para linha reta
-    }
-
     /* ── map ── */
-    var markers = {}, trails = {}, trailLayers = {}, lastRawPos = {}, activeId = null, firstFit = true;
+    var markers = {}, allRiders = {}, activeId = null, firstFit = true;
 
     window.addEventListener('load', function () {
       window._map = L.map('map', { zoomControl: true, attributionControl: false });
@@ -1064,14 +1055,15 @@
       startTimer();
     });
 
-    function mkIcon(u, color) {
+    function mkIcon(u, color, lost) {
       var i = ini(u.userName);
       var inner = u.avatarUrl ? '<img src="' + BASE + u.avatarUrl + '" onerror="this.style.display=\'none\'">' : i;
-      var speed = kmh(u.speed);
+      var speed = lost ? 'PERDA DE SINAL' : kmh(u.speed) + ' km/h';
+      var c = lost ? '#ff3333' : color;
       return L.divIcon({
         className: '',
-        html: '<div class="mk" style="--c:' + color + '">' +
-          '<div class="mv" style="background:var(--c)">' + speed + ' km/h</div>' +
+        html: '<div class="mk ' + (lost ? 'lost' : '') + '" style="--c:' + c + '">' +
+          '<div class="mv" style="background:var(--c)">' + speed + '</div>' +
           '<div class="mr" style="border-color:var(--c);color:var(--c);box-shadow:0 0 10px var(--c)">' + inner + '</div>' +
           '<div class="ml">' + u.userName.split(' ')[0] + '</div></div>',
         iconSize: [34, 58],
@@ -1091,81 +1083,47 @@
         '<div class="pr"><span>Update</span><span class="pv">' + ago(u.timestamp) + '</span></div></div>';
     }
     function updateMap(pos) {
-      document.getElementById('cnt').textContent = pos.length;
-      var el = document.getElementById('rlist');
-      if (!pos.length) { el.innerHTML = '<div class="empty">Nenhum piloto agora</div>'; return; }
-      var seen = {};
+      // 1. Atualizar Cache (Manter 6 pilotos sempre)
       pos.forEach(function (u) {
-        if (u.latitude == null || u.longitude == null) return;
-        seen[u.userId] = true;
+        if (u.latitude != null && u.longitude != null) allRiders[u.userId] = u;
+      });
+
+      var riderList = Object.values(allRiders);
+      document.getElementById('cnt').textContent = riderList.length;
+      var el = document.getElementById('rlist');
+      if (!riderList.length) { el.innerHTML = '<div class="empty">Nenhum piloto detectado</div>'; return; }
+
+      riderList.forEach(function (u) {
         var ll = [u.latitude, u.longitude];
-
-        // Atualizar rastro (máximo 1000 pontos)
-        var START_POINT = [-4.0958, -54.9100]; // Rurópolis, PA
         var color = getRiderColor(u.userId);
-
-        if (!trails[u.userId]) {
-          trails[u.userId] = [START_POINT];
-          lastRawPos[u.userId] = START_POINT;
-        }
-
-        var prev = lastRawPos[u.userId];
-        if (prev[0] !== ll[0] || prev[1] !== ll[1]) {
-          lastRawPos[u.userId] = ll;
-          getRoadPath(prev, ll).then(function (path) {
-            if (path && path.length > 0) {
-              var segment = (path.length > 1) ? path.slice(1) : path;
-              trails[u.userId] = trails[u.userId].concat(segment);
-              if (trails[u.userId].length > 1000) trails[u.userId] = trails[u.userId].slice(-1000);
-              if (trailLayers[u.userId]) trailLayers[u.userId].setLatLngs(trails[u.userId]);
-            }
-          });
-        }
-
-        // Desenhar/Atualizar Polyline
-        if (trailLayers[u.userId]) {
-          // Já atualizado dentro do callback assíncrono ou acima
-        } else {
-          trailLayers[u.userId] = L.polyline(trails[u.userId], {
-            color: color,
-            weight: 5,
-            opacity: 0.8,
-            lineJoin: 'round',
-            lineCap: 'round'
-          }).addTo(window._map);
-        }
+        var diff = Date.now() - new Date(u.timestamp);
+        var lost = diff > 300000; // 5 minutos em ms
 
         // Atualizar Marcador
         if (markers[u.userId]) {
           markers[u.userId].setLatLng(ll);
-          markers[u.userId].setIcon(mkIcon(u, color));
+          markers[u.userId].setIcon(mkIcon(u, color, lost));
           markers[u.userId].setPopupContent(mkPopup(u));
         } else {
-          var m = L.marker(ll, { icon: mkIcon(u, color) }).addTo(window._map);
+          var m = L.marker(ll, { icon: mkIcon(u, color, lost) }).addTo(window._map);
           m.bindPopup(mkPopup(u)); markers[u.userId] = m;
         }
       });
-      Object.keys(markers).forEach(function (id) {
-        if (!seen[id]) {
-          window._map.removeLayer(markers[id]); delete markers[id];
-          if (trailLayers[id]) { window._map.removeLayer(trailLayers[id]); delete trailLayers[id]; }
-        }
-      });
-      if (firstFit && pos.length) {
-        var validCoords = pos.filter(function (u) { return u.latitude != null && u.longitude != null; })
-          .map(function (u) { return [u.latitude, u.longitude]; });
-        if (validCoords.length) {
-          firstFit = false;
-          window._map.fitBounds(validCoords, { padding: [60, 60] });
-        }
+
+      if (firstFit && riderList.length) {
+        firstFit = false;
+        window._map.fitBounds(riderList.map(function (u) { return [u.latitude, u.longitude]; }), { padding: [60, 60] });
       }
-      el.innerHTML = pos.map(function (u) {
+
+      el.innerHTML = riderList.sort(function (a, b) { return new Date(b.timestamp) - new Date(a.timestamp); }).map(function (u) {
+        var diff = Date.now() - new Date(u.timestamp);
+        var lost = diff > 300000;
         var av = u.avatarUrl ? '<img src="' + BASE + u.avatarUrl + '">' : ini(u.userName);
         var h = u.heading != null ? u.heading.toFixed(0) : '---';
-        return '<div class="rcard' + (u.userId === activeId ? ' active' : '') + '" onclick="focusRider(\'' + u.userId + '\')">' +
+        return '<div class="rcard' + (u.userId === activeId ? ' active' : '') + (lost ? ' lost' : '') + '" onclick="focusRider(\'' + u.userId + '\')">' +
           '<div class="av">' + av + '</div>' +
           '<div class="ri"><div class="rn">' + u.userName + '</div>' +
-          '<div class="rm"><span class="spd">' + kmh(u.speed) + ' km/h</span><span>' + h + '°</span></div>' +
+          '<div class="rm"><span class="spd" ' + (lost ? 'style="color:#ff3333"' : '') + '>' + (lost ? 'SEM SINAL' : kmh(u.speed) + ' km/h') + '</span><span>' + h + '°</span></div>' +
           '<div class="ago">' + ago(u.timestamp) + '</div></div></div>';
       }).join('');
     }
@@ -1235,7 +1193,7 @@
     setInterval(updateOnline, 20000);
     setTimeout(updateOnline, 2000);
   </script>
-  <div class="version-label">v1.1</div>
+  <div class="version-label">v1.2</div>
 </body>
 
 </html>

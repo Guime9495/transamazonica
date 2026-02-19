@@ -48,7 +48,20 @@
       background: var(--surf);
       border-bottom: 1px solid var(--bord);
       flex-shrink: 0;
-      gap: 16px
+      gap: 12px;
+      justify-content: space-between;
+    }
+
+    @media (max-width: 600px) {
+      header {
+        padding: 0 10px;
+        height: auto;
+        min-height: 52px;
+        flex-wrap: wrap;
+        padding-top: 8px;
+        padding-bottom: 8px;
+        gap: 8px;
+      }
     }
 
     .logo {
@@ -57,6 +70,17 @@
       letter-spacing: 3px;
       color: var(--green);
       white-space: nowrap
+    }
+
+    @media (max-width: 480px) {
+      .logo {
+        font-size: 16px;
+        letter-spacing: 1.5px;
+      }
+
+      .logo small {
+        display: none;
+      }
     }
 
     .logo small {
@@ -459,8 +483,18 @@
 
     .lives-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
       gap: 20px
+    }
+
+    @media (max-width: 600px) {
+      .lives-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .lives-container {
+        padding: 16px;
+      }
     }
 
     .live-card {
@@ -819,7 +853,7 @@
         <option value="30000">30s</option>
       </select>
       <span id="lupd">—</span>
-      <span id="onl" style="color:var(--green);font-weight:600;margin-left:8px">🟢 1 ONLINE</span>
+      <span id="onl" style="color:var(--green);font-weight:600;margin-left:8px;white-space:nowrap">🟢 1 ON</span>
     </div>
     <div class="nav">
       <button class="ntab on" onclick="showPage('map')">🗺 MAPA</button>
@@ -1011,10 +1045,10 @@
       if (d < 3600) return Math.floor(d / 60) + 'min atrás';
       return Math.floor(d / 3600) + 'h atrás';
     }
-    function kmh(s) { return (s * 3.6).toFixed(1); }
+    function kmh(s) { return s != null ? (s * 3.6).toFixed(1) : '0.0'; }
 
     /* ── map ── */
-    var markers = {}, activeId = null, firstFit = true;
+    var markers = {}, trails = {}, trailLayers = {}, activeId = null, firstFit = true;
 
     window.addEventListener('load', function () {
       window._map = L.map('map', { zoomControl: true, attributionControl: false });
@@ -1037,11 +1071,14 @@
       });
     }
     function mkPopup(u) {
+      var h = u.heading != null ? u.heading.toFixed(1) : '---';
+      var lat = u.latitude != null ? u.latitude.toFixed(5) : '---';
+      var lng = u.longitude != null ? u.longitude.toFixed(5) : '---';
       return '<div class="pc"><div class="pn">' + u.userName + '</div>' +
         '<div class="pr"><span>Velocidade</span><span class="pv ps">' + kmh(u.speed) + ' km/h</span></div>' +
-        '<div class="pr"><span>Heading</span><span class="pv">' + u.heading.toFixed(1) + '°</span></div>' +
-        '<div class="pr"><span>Lat</span><span class="pv">' + u.latitude.toFixed(5) + '</span></div>' +
-        '<div class="pr"><span>Lng</span><span class="pv">' + u.longitude.toFixed(5) + '</span></div>' +
+        '<div class="pr"><span>Heading</span><span class="pv">' + h + '°</span></div>' +
+        '<div class="pr"><span>Lat</span><span class="pv">' + lat + '</span></div>' +
+        '<div class="pr"><span>Lng</span><span class="pv">' + lng + '</span></div>' +
         '<div class="pr"><span>Update</span><span class="pv">' + ago(u.timestamp) + '</span></div></div>';
     }
     function updateMap(pos) {
@@ -1050,8 +1087,31 @@
       if (!pos.length) { el.innerHTML = '<div class="empty">Nenhum piloto agora</div>'; return; }
       var seen = {};
       pos.forEach(function (u) {
+        if (u.latitude == null || u.longitude == null) return;
         seen[u.userId] = true;
         var ll = [u.latitude, u.longitude];
+
+        // Atualizar rastro (máximo 100 pontos para performance)
+        if (!trails[u.userId]) trails[u.userId] = [];
+        var last = trails[u.userId][trails[u.userId].length - 1];
+        if (!last || last[0] !== ll[0] || last[1] !== ll[1]) {
+          trails[u.userId].push(ll);
+          if (trails[u.userId].length > 100) trails[u.userId].shift();
+        }
+
+        // Desenhar/Atualizar Polyline
+        if (trailLayers[u.userId]) {
+          trailLayers[u.userId].setLatLngs(trails[u.userId]);
+        } else {
+          trailLayers[u.userId] = L.polyline(trails[u.userId], {
+            color: '#00ff66',
+            weight: 3,
+            opacity: 0.6,
+            dashArray: '5, 10'
+          }).addTo(window._map);
+        }
+
+        // Atualizar Marcador
         if (markers[u.userId]) {
           markers[u.userId].setLatLng(ll);
           markers[u.userId].setIcon(mkIcon(u));
@@ -1062,18 +1122,26 @@
         }
       });
       Object.keys(markers).forEach(function (id) {
-        if (!seen[id]) { window._map.removeLayer(markers[id]); delete markers[id]; }
+        if (!seen[id]) {
+          window._map.removeLayer(markers[id]); delete markers[id];
+          if (trailLayers[id]) { window._map.removeLayer(trailLayers[id]); delete trailLayers[id]; }
+        }
       });
       if (firstFit && pos.length) {
-        firstFit = false;
-        window._map.fitBounds(pos.map(function (u) { return [u.latitude, u.longitude] }), { padding: [60, 60] });
+        var validCoords = pos.filter(function (u) { return u.latitude != null && u.longitude != null; })
+          .map(function (u) { return [u.latitude, u.longitude]; });
+        if (validCoords.length) {
+          firstFit = false;
+          window._map.fitBounds(validCoords, { padding: [60, 60] });
+        }
       }
       el.innerHTML = pos.map(function (u) {
         var av = u.avatarUrl ? '<img src="' + BASE + u.avatarUrl + '">' : ini(u.userName);
+        var h = u.heading != null ? u.heading.toFixed(0) : '---';
         return '<div class="rcard' + (u.userId === activeId ? ' active' : '') + '" onclick="focusRider(\'' + u.userId + '\')">' +
           '<div class="av">' + av + '</div>' +
           '<div class="ri"><div class="rn">' + u.userName + '</div>' +
-          '<div class="rm"><span class="spd">' + kmh(u.speed) + ' km/h</span><span>' + u.heading.toFixed(0) + '°</span></div>' +
+          '<div class="rm"><span class="spd">' + kmh(u.speed) + ' km/h</span><span>' + h + '°</span></div>' +
           '<div class="ago">' + ago(u.timestamp) + '</div></div></div>';
       }).join('');
     }

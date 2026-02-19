@@ -406,7 +406,7 @@
       transform: translateX(-50%);
       border-left: 4px solid transparent;
       border-right: 4px solid transparent;
-      border-top: 4px solid rgba(255, 107, 43, 0.9);
+      border-top: 4px solid var(--c, #ff6b2b);
     }
 
     .leaflet-popup-content-wrapper {
@@ -992,29 +992,11 @@
           </a>
         </div>
 
-        <!-- Pix -->
-        <div class="support-card">
-          <h3>DOAÇÃO PIX</h3>
-          <p>Sua contribuição ajuda a manter a infraestrutura e o desenvolvimento do tracker.</p>
-
-          <div class="pix-qr" id="pix-qr-container">
-            <!-- QR Code será gerado via JS -->
-          </div>
-
-          <div class="pix-info" onclick="copyCPF()">
-            <span class="pix-label">Chave CPF (clique para copiar)</span>
-            <span class="pix-value" id="cpf-value">12821176619</span>
-          </div>
-
-          <button onclick="copyCPF()" class="btn-action secondary" id="copy-btn">
-            COPIAR CPF
-          </button>
-        </div>
       </div>
     </div>
   </div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
     var API_RAW = 'https://helios.ratonet.com.br/api/v1/helios/positions?slug=transamazonica-2026';
@@ -1047,8 +1029,32 @@
     }
     function kmh(s) { return s != null ? (s * 3.6).toFixed(1) : '0.0'; }
 
+    // Gerar cor estável por ID
+    function getRiderColor(id) {
+      var hash = 0;
+      for (var i = 0; i < id.length; i++) hash = id.charCodeAt(i) + ((hash << 5) - hash);
+      return 'hsl(' + (Math.abs(hash) % 360) + ', 75%, 60%)';
+    }
+
+    // OSRM Snap-to-Road
+    async function getRoadPath(p1, p2) {
+      if (!p1 || !p2) return [p2];
+      try {
+        var url = 'https://router.project-osrm.org/route/v1/driving/' +
+          p1[1].toFixed(6) + ',' + p1[0].toFixed(6) + ';' +
+          p2[1].toFixed(6) + ',' + p2[0].toFixed(6) +
+          '?overview=full&geometries=geojson';
+        var r = await fetch(url);
+        var d = await r.json();
+        if (d.code === 'Ok' && d.routes && d.routes[0]) {
+          return d.routes[0].geometry.coordinates.map(function (c) { return [c[1], c[0]]; });
+        }
+      } catch (e) { console.error('OSRM fail:', e); }
+      return [p2]; // Fallback para linha reta
+    }
+
     /* ── map ── */
-    var markers = {}, trails = {}, trailLayers = {}, activeId = null, firstFit = true;
+    var markers = {}, trails = {}, trailLayers = {}, lastRawPos = {}, activeId = null, firstFit = true;
 
     window.addEventListener('load', function () {
       window._map = L.map('map', { zoomControl: true, attributionControl: false });
@@ -1058,13 +1064,16 @@
       startTimer();
     });
 
-    function mkIcon(u) {
+    function mkIcon(u, color) {
       var i = ini(u.userName);
       var inner = u.avatarUrl ? '<img src="' + BASE + u.avatarUrl + '" onerror="this.style.display=\'none\'">' : i;
       var speed = kmh(u.speed);
       return L.divIcon({
         className: '',
-        html: '<div class="mk"><div class="mv">' + speed + ' km/h</div><div class="mr">' + inner + '</div><div class="ml">' + u.userName.split(' ')[0] + '</div></div>',
+        html: '<div class="mk" style="--c:' + color + '">' +
+          '<div class="mv" style="background:var(--c)">' + speed + ' km/h</div>' +
+          '<div class="mr" style="border-color:var(--c);color:var(--c);box-shadow:0 0 10px var(--c)">' + inner + '</div>' +
+          '<div class="ml">' + u.userName.split(' ')[0] + '</div></div>',
         iconSize: [34, 58],
         iconAnchor: [17, 17],
         popupAnchor: [0, -20]
@@ -1091,33 +1100,48 @@
         seen[u.userId] = true;
         var ll = [u.latitude, u.longitude];
 
-        // Atualizar rastro (máximo 100 pontos para performance)
-        if (!trails[u.userId]) trails[u.userId] = [];
-        var last = trails[u.userId][trails[u.userId].length - 1];
-        if (!last || last[0] !== ll[0] || last[1] !== ll[1]) {
-          trails[u.userId].push(ll);
-          if (trails[u.userId].length > 100) trails[u.userId].shift();
+        // Atualizar rastro (máximo 1000 pontos)
+        var START_POINT = [-4.0958, -54.9100]; // Rurópolis, PA
+        var color = getRiderColor(u.userId);
+
+        if (!trails[u.userId]) {
+          trails[u.userId] = [START_POINT];
+          lastRawPos[u.userId] = START_POINT;
+        }
+
+        var prev = lastRawPos[u.userId];
+        if (prev[0] !== ll[0] || prev[1] !== ll[1]) {
+          lastRawPos[u.userId] = ll;
+          getRoadPath(prev, ll).then(function (path) {
+            if (path && path.length > 0) {
+              var segment = (path.length > 1) ? path.slice(1) : path;
+              trails[u.userId] = trails[u.userId].concat(segment);
+              if (trails[u.userId].length > 1000) trails[u.userId] = trails[u.userId].slice(-1000);
+              if (trailLayers[u.userId]) trailLayers[u.userId].setLatLngs(trails[u.userId]);
+            }
+          });
         }
 
         // Desenhar/Atualizar Polyline
         if (trailLayers[u.userId]) {
-          trailLayers[u.userId].setLatLngs(trails[u.userId]);
+          // Já atualizado dentro do callback assíncrono ou acima
         } else {
           trailLayers[u.userId] = L.polyline(trails[u.userId], {
-            color: '#00ff66',
-            weight: 3,
-            opacity: 0.6,
-            dashArray: '5, 10'
+            color: color,
+            weight: 5,
+            opacity: 0.8,
+            lineJoin: 'round',
+            lineCap: 'round'
           }).addTo(window._map);
         }
 
         // Atualizar Marcador
         if (markers[u.userId]) {
           markers[u.userId].setLatLng(ll);
-          markers[u.userId].setIcon(mkIcon(u));
+          markers[u.userId].setIcon(mkIcon(u, color));
           markers[u.userId].setPopupContent(mkPopup(u));
         } else {
-          var m = L.marker(ll, { icon: mkIcon(u) }).addTo(window._map);
+          var m = L.marker(ll, { icon: mkIcon(u, color) }).addTo(window._map);
           m.bindPopup(mkPopup(u)); markers[u.userId] = m;
         }
       });
@@ -1194,76 +1218,7 @@
       window.open('https://www.youtube.com/watch?v=' + videoId, '_blank');
     }
 
-    /* ── Support & Pix ── */
-    function copyCPF() {
-      var cpf = "12821176619";
-      navigator.clipboard.writeText(cpf).then(function () {
-        var btn = document.getElementById('copy-btn');
-        var originalText = btn.innerHTML;
-        btn.innerHTML = '✅ COPIADO!';
-        btn.style.borderColor = 'var(--green)';
-        btn.style.color = 'var(--green)';
 
-        setTimeout(function () {
-          btn.innerHTML = originalText;
-          btn.style.borderColor = '';
-          btn.style.color = '';
-        }, 2000);
-      });
-    }
-
-    // Gerador de Payload Pix (BR Code Estático)
-    function generatePixPayload(key, name, city) {
-      function format(id, val) {
-        var len = val.length.toString().padStart(2, '0');
-        return id + len + val;
-      }
-
-      var payload = '000201'; // Payload Indicator
-      var merchantInfo = format('00', 'br.gov.bcb.pix') + format('01', key);
-      payload += format('26', merchantInfo);
-      payload += '52040000'; // Merchant Category Code
-      payload += '5303986';  // Currency (BRL)
-      payload += format('58', 'BR'); // Country
-      payload += format('59', name.substring(0, 25).toUpperCase()); // Name
-      payload += format('60', city.substring(0, 15).toUpperCase()); // City
-      payload += '62070503***'; // Additional Info (Transaction ID)
-
-      // CRC16 Calculation (Poly: 0x1021, Init: 0xFFFF)
-      function crc16(data) {
-        var crc = 0xFFFF;
-        for (var i = 0; i < data.length; i++) {
-          crc ^= (data.charCodeAt(i) << 8);
-          for (var j = 0; j < 8; j++) {
-            if ((crc & 0x8000) !== 0) crc = (crc << 1) ^ 0x1021;
-            else crc <<= 1;
-          }
-        }
-        return (crc & 0xFFFF).toString(16).toUpperCase().padStart(4, '0');
-      }
-
-      payload += '6304';
-      payload += crc16(payload);
-      return payload;
-    }
-
-    function initPix() {
-      var pixContainer = document.getElementById('pix-qr-container');
-      if (pixContainer && typeof QRCode !== 'undefined') {
-        var payload = generatePixPayload('12821176619', 'Guilherme Ribeiro', 'SAO PAULO');
-        new QRCode(pixContainer, {
-          text: payload,
-          width: 180,
-          height: 180,
-          colorDark: "#000000",
-          colorLight: "#ffffff",
-          correctLevel: QRCode.CorrectLevel.M
-        });
-      }
-    }
-
-    // Chamar inicialização do Pix após o carregamento
-    setTimeout(initPix, 1000);
 
     /* ── Online Counter ── */
     function updateOnline() {

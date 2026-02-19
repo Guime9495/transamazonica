@@ -745,7 +745,7 @@
 
     window.addEventListener('load', function () {
       window._map = L.map('map', { zoomControl: true, attributionControl: false });
-      L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', { maxZoom: 20, subdomains: ['mt0', 'mt1', 'mt2', 'mt3'] }).addTo(window._map);
+      L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { maxZoom: 20, subdomains: ['mt0', 'mt1', 'mt2', 'mt3'] }).addTo(window._map);
       window._map.setView([-6.35, -58.12], 12);
       mainFetch();
       startTimer();
